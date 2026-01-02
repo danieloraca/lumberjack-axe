@@ -1,6 +1,6 @@
 use crate::aws::{AwsLogError, LogEntry};
 use crate::worker::{WorkerHandle, WorkerRequest};
-use chrono::{DateTime, Local, Utc};
+use chrono::{Local, TimeZone, Utc};
 use eframe::egui;
 use std::time::Duration;
 use std::time::Instant;
@@ -391,7 +391,7 @@ impl App {
             ui.label("Tail every (s):");
             let mut interval = self.logs_view.tail_interval_secs as i32;
             if ui
-                .add(egui::DragValue::new(&mut interval).clamp_range(1..=300))
+                .add(egui::DragValue::new(&mut interval).range(1..=300))
                 .changed()
             {
                 self.logs_view.tail_interval_secs = interval.max(1) as u64;
@@ -454,22 +454,24 @@ impl App {
 }
 
 fn format_timestamp_millis(ts_millis: i64, use_local: bool) -> String {
+    use chrono::LocalResult;
+
     if ts_millis <= 0 {
         return "-".to_string();
     }
 
     let secs = ts_millis / 1000;
     let nanos = (ts_millis % 1000) * 1_000_000;
-    let naive = match chrono::NaiveDateTime::from_timestamp_opt(secs, nanos as u32) {
-        Some(n) => n,
-        None => return "-".to_string(),
-    };
 
     if use_local {
-        let dt: DateTime<Local> = DateTime::from_utc(naive, *Local::now().offset());
-        dt.format("%Y-%m-%d %H:%M:%S%.3f").to_string()
+        match Local.timestamp_opt(secs, nanos as u32) {
+            LocalResult::Single(dt) => dt.format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
+            _ => "-".to_string(),
+        }
     } else {
-        let dt: DateTime<Utc> = DateTime::<Utc>::from_utc(naive, Utc);
-        dt.format("%Y-%m-%d %H:%M:%S%.3fZ").to_string()
+        match Utc.timestamp_opt(secs, nanos as u32) {
+            LocalResult::Single(dt) => dt.format("%Y-%m-%d %H:%M:%S%.3fZ").to_string(),
+            _ => "-".to_string(),
+        }
     }
 }

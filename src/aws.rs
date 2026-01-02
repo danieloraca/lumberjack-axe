@@ -54,7 +54,8 @@ impl<'a> Default for FetchLogsParams<'a> {
 }
 
 async fn mk_client(profile: Option<&str>, region: Option<&str>) -> CloudWatchLogsClient {
-    let mut loader = aws_config::from_env();
+    // Start from the new defaults-based config builder.
+    let mut loader = aws_config::defaults(BehaviorVersion::latest());
 
     if let Some(p) = profile {
         loader = loader.profile_name(p.to_string());
@@ -63,10 +64,6 @@ async fn mk_client(profile: Option<&str>, region: Option<&str>) -> CloudWatchLog
     if let Some(r) = region {
         let region = aws_config::Region::new(r.to_string());
         loader = loader.region(region);
-    } else {
-        return CloudWatchLogsClient::new(
-            &aws_config::load_defaults(BehaviorVersion::latest()).await,
-        );
     }
 
     let config = loader.load().await;

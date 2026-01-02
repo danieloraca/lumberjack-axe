@@ -1,3 +1,4 @@
+use aws_config::BehaviorVersion;
 use aws_sdk_cloudwatchlogs::Client as CloudWatchLogsClient;
 use aws_sdk_cloudwatchlogs::types::FilteredLogEvent;
 use std::env;
@@ -21,23 +22,16 @@ async fn main() {
     println!("Region:  {:?}", region.as_deref().unwrap_or("<auto>"));
     println!("LogGroup: {:?}", log_group);
 
-    let mut loader = aws_config::from_env();
-
-    if let Some(ref p) = profile {
-        println!("Using profile {:?}", p);
-        loader = loader.profile_name(p.clone());
-    }
-
-    if let Some(ref r) = region {
-        println!("Using region {:?}", r);
-        let region = aws_config::Region::new(r.clone());
-        loader = loader.region(region);
-    } else {
-        println!("No explicit region set; will rely on defaults (may fail).");
-    }
-
     println!("Loading AWS config...");
-    let config = loader.load().await;
+    let config = if let Some(ref r) = region {
+        let region = aws_config::Region::new(r.clone());
+        aws_config::defaults(BehaviorVersion::latest())
+            .region(region)
+            .load()
+            .await
+    } else {
+        aws_config::defaults(BehaviorVersion::latest()).load().await
+    };
 
     let client = CloudWatchLogsClient::new(&config);
 

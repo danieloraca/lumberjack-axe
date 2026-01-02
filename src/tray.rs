@@ -5,6 +5,7 @@ use tray_icon::{
     menu::{Menu, MenuItem},
 };
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum TrayEvent {
     ToggleWindow,
@@ -37,6 +38,7 @@ impl Default for TrayConfig {
     }
 }
 
+#[allow(dead_code)]
 pub struct TrayHandle {
     inner: Option<TrayIcon>,
 }
@@ -79,6 +81,7 @@ impl TrayHandle {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum TrayError {
     Unsupported,
@@ -98,6 +101,7 @@ impl fmt::Display for TrayError {
 
 impl std::error::Error for TrayError {}
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct TrayEventReceiver {
     inner: Option<Receiver<TrayEvent>>,
