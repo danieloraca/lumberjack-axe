@@ -1,36 +1,8 @@
-//! Tray (system status bar) integration for Lumberjack Axe.
-//!
-//! The goal of this module is to encapsulate all platform-specific logic
-//! required to show a tray / menu bar icon (the "axe") and to coordinate
-//! with the main egui/eframe window.
-//!
-//! It uses the `tray-icon` crate under the hood to create a system tray icon
-//! with a basic left-click handler that emits high-level events over a
-//! non-blocking crossbeam channel.
-//!
-//! Design goals:
-//! - Keep the rest of the app unaware of the tray crate being used.
-//! - Allow the tray to send high-level events (ShowWindow, HideWindow, Quit).
-//! - Allow the app to update tray state (e.g., unread error badge) without
-//!   talking to platform APIs directly.
-//!
-//! Over time we can add:
-//! - Platform-specific icon variants
-//! - Context menus for favorites, quick actions, etc.
-//! - Badge/status indicators
-//!
-//! Example of how this module might be used in `main.rs`:
-//! ```ignore
-//! let (tray, tray_events) = tray::TrayHandle::spawn(TrayConfig::default())?;
-//! // Pass `tray_events` into the egui app loop so UI can react to clicks.
-//! // Keep `tray` around to update tooltip, icon badge, etc.
-//! ```
-
 use std::fmt;
 
 use crossbeam_channel::{Receiver, unbounded};
 use tray_icon::{
-    ClickType, TrayIcon, TrayIconBuilder, TrayIconEvent,
+    ClickType, Icon, TrayIcon, TrayIconBuilder, TrayIconEvent,
     menu::{Menu, MenuItem},
 };
 
@@ -85,21 +57,11 @@ impl Default for TrayConfig {
     }
 }
 
-/// Handle to an active tray instance.
-///
-/// This owns the underlying `tray-icon` handle for the system tray and
-/// provides a small, app-friendly API on top of it.
 pub struct TrayHandle {
     inner: Option<TrayIcon>,
 }
 
 impl TrayHandle {
-    /// Create a new tray instance with the given configuration.
-    ///
-    /// This:
-    /// - Initializes the system tray icon using `tray-icon`
-    /// - Sets up a left-click handler that toggles the main window
-    /// - Returns a `TrayHandle` plus a non-blocking receiver for `TrayEvent`s
     pub fn spawn(config: TrayConfig) -> Result<(Self, TrayEventReceiver), TrayError> {
         // Channel from the tray callback to the rest of the app.
         let (sender, receiver) = unbounded::<TrayEvent>();
@@ -112,9 +74,11 @@ impl TrayHandle {
         builder = builder.with_tooltip(config.tooltip);
         builder = builder.with_menu(Box::new(menu));
 
-        // Use the global tray icon event hook from tray-icon 0.10.
+        if let Some(icon) = load_axe_icon() {
+            builder = builder.with_icon(icon);
+        }
+
         tray_icon::TrayIconEvent::set_event_handler(Some(Box::new(move |event: TrayIconEvent| {
-            // Left-click on the tray icon should toggle the window.
             if event.click_type == ClickType::Left {
                 let _ = sender.send(TrayEvent::ToggleWindow);
             }
@@ -215,5 +179,34 @@ impl TrayEventReceiver {
     /// Whether this receiver is closed and will never yield further events.
     pub fn is_closed(&self) -> bool {
         self.inner.is_none()
+    }
+}
+
+fn load_axe_icon() -> Option<Icon> {
+    let path = "assets/axe.png";
+    match image::open(path) {
+        Ok(img) => {
+            // Resize to a small square icon for the tray.
+            let img = img
+                .resize_exact(32, 32, image::imageops::Lanczos3)
+                .into_rgba8();
+            let (width, height) = img.dimensions();
+            let rgba = img.into_raw();
+
+            match Icon::from_rgba(rgba, width, height) {
+                Ok(icon) => {
+                    println!("[axe] Loaded tray icon from {path} ({width}x{height})");
+                    Some(icon)
+                }
+                Err(e) => {
+                    eprintln!("[axe] Failed to create Icon from {path}: {e}");
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("[axe] Failed to open tray icon at {path}: {e}");
+            None
+        }
     }
 }
