@@ -15,6 +15,7 @@ pub struct App {
 
     /// Handle to the background AWS worker.
     worker: WorkerHandle,
+    theme: Theme,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,6 +50,13 @@ pub struct LogsViewState {
     pub entries: Vec<LogEntry>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Theme {
+    Light,
+    Dark,
+    RetroGreen,
+}
+
 impl LogsViewState {
     pub fn new_default() -> Self {
         Self {
@@ -75,6 +83,7 @@ impl App {
             fetch_rx: None,
             groups_rx: None,
             worker,
+            theme: Theme::Dark,
         }
     }
 
@@ -99,6 +108,22 @@ impl eframe::App for App {
         // Honor external close requests, e.g. from tray/menu integration.
         if self.should_close {
             //
+        }
+
+        match self.theme {
+            Theme::Light => ctx.set_visuals(egui::Visuals::light()),
+            Theme::Dark => ctx.set_visuals(egui::Visuals::dark()),
+            Theme::RetroGreen => {
+                let mut visuals = egui::Visuals::dark();
+                // Retro CRT style
+                visuals.override_text_color = Some(egui::Color32::from_rgb(0x00, 0xff, 0x66));
+                visuals.panel_fill = egui::Color32::BLACK;
+                visuals.extreme_bg_color = egui::Color32::BLACK;
+                visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(0x00, 0x20, 0x00);
+                visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(0x00, 0x40, 0x00);
+                visuals.widgets.active.bg_fill = egui::Color32::from_rgb(0x00, 0x60, 0x00);
+                ctx.set_visuals(visuals);
+            }
         }
 
         // Check for results from any in-flight background fetch.
@@ -168,6 +193,22 @@ impl eframe::App for App {
                         self.should_close = true;
                     }
                     ui.label("v0.1.0");
+
+                    ui.separator();
+
+                    // Theme toggle button
+                    let theme_label = match self.theme {
+                        Theme::Light => "Theme: Light",
+                        Theme::Dark => "Theme: Dark",
+                        Theme::RetroGreen => "Theme: Retro",
+                    };
+                    if ui.button(theme_label).clicked() {
+                        self.theme = match self.theme {
+                            Theme::Light => Theme::Dark,
+                            Theme::Dark => Theme::RetroGreen,
+                            Theme::RetroGreen => Theme::Light,
+                        };
+                    }
                 });
             });
 
@@ -365,14 +406,26 @@ impl App {
                         continue;
                     }
 
-                    let level_color = if entry.message.contains("ERROR") {
-                        egui::Color32::RED
-                    } else if entry.message.contains("WARN") {
-                        egui::Color32::YELLOW
-                    } else if entry.message.contains("INFO") {
-                        egui::Color32::LIGHT_GREEN
+                    let level_color = if self.theme == Theme::RetroGreen {
+                        // retro palette
+                        if entry.message.contains("ERROR") {
+                            egui::Color32::from_rgb(0xff, 0x40, 0x40)
+                        } else if entry.message.contains("WARN") {
+                            egui::Color32::from_rgb(0xff, 0xff, 0x80)
+                        } else {
+                            egui::Color32::from_rgb(0x00, 0xff, 0x66)
+                        }
                     } else {
-                        egui::Color32::WHITE
+                        // normal palette
+                        if entry.message.contains("ERROR") {
+                            egui::Color32::RED
+                        } else if entry.message.contains("WARN") {
+                            egui::Color32::YELLOW
+                        } else if entry.message.contains("INFO") {
+                            egui::Color32::LIGHT_GREEN
+                        } else {
+                            egui::Color32::WHITE
+                        }
                     };
 
                     let header = match &entry.log_stream_name {
