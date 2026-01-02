@@ -2,6 +2,7 @@ use crate::aws::{AwsLogError, LogEntry};
 use crate::worker::{WorkerHandle, WorkerRequest};
 use chrono::{Local, TimeZone, Utc};
 use eframe::egui;
+use serde_json::Value as JsonValue;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -446,7 +447,21 @@ impl App {
                     };
 
                     ui.colored_label(egui::Color32::LIGHT_BLUE, header);
-                    ui.label(egui::RichText::new(&entry.message).color(level_color));
+
+                    // Try JSON pretty-print; fall back to raw message.
+                    if let Some(pretty_json) = try_pretty_json(&entry.message) {
+                        // Render multi-line JSON in monospace with the level color.
+                        ui.add(
+                            egui::TextEdit::multiline(&mut pretty_json.clone())
+                                .font(egui::TextStyle::Monospace)
+                                .text_color(level_color)
+                                .desired_width(f32::INFINITY)
+                                .interactive(false),
+                        );
+                    } else {
+                        ui.label(egui::RichText::new(&entry.message).color(level_color));
+                    }
+
                     ui.separator();
                 }
             });
@@ -473,5 +488,30 @@ fn format_timestamp_millis(ts_millis: i64, use_local: bool) -> String {
             LocalResult::Single(dt) => dt.format("%Y-%m-%d %H:%M:%S%.3fZ").to_string(),
             _ => "-".to_string(),
         }
+    }
+}
+
+fn try_pretty_json(message: &str) -> Option<String> {
+    // Quick heuristic: must start with { or [ and end with } or ] (after trimming).
+    let trimmed = message.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let first = trimmed.as_bytes()[0] as char;
+    let last = trimmed.as_bytes()[trimmed.len() - 1] as char;
+    if !((first == '{' && last == '}') || (first == '[' && last == ']')) {
+        return None;
+    }
+
+    // Try to parse as JSON.
+    match serde_json::from_str::<JsonValue>(trimmed) {
+        Ok(v) => {
+            // Pretty-print with 2-space indentation.
+            match serde_json::to_string_pretty(&v) {
+                Ok(pretty) => Some(pretty),
+                Err(_) => None,
+            }
+        }
+        Err(_) => None,
     }
 }
