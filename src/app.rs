@@ -3,6 +3,7 @@ use crate::worker::{WorkerHandle, WorkerRequest};
 use chrono::{DateTime, Local, Utc};
 use eframe::egui;
 use std::time::Duration;
+use std::time::Instant;
 
 pub struct App {
     view: ActiveView,
@@ -29,27 +30,16 @@ pub enum ActiveView {
 #[derive(Default)]
 pub struct LogsViewState {
     pub profile: String,
-    /// AWS region, e.g. "us-east-1".
     pub region: String,
-
-    /// CloudWatch Logs log group name.
     pub log_group: String,
-
-    /// Simple client-side filter text.
     pub filter_text: String,
-
-    /// All log groups loaded for the current region.
     pub available_groups: Vec<String>,
-
-    /// Index into `available_groups` for the currently selected group.
     pub selected_group_index: Option<usize>,
-
-    /// Whether "tail mode" is enabled (implementation TBD).
     pub tail_mode: bool,
     pub show_local_time: bool,
-
-    /// In-memory buffer of log entries fetched from AWS.
     pub entries: Vec<LogEntry>,
+    pub tail_interval_secs: u64,
+    pub last_tail_instant: Option<std::time::Instant>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,6 +61,8 @@ impl LogsViewState {
             entries: Vec::new(),
             available_groups: Vec::new(),
             selected_group_index: None,
+            tail_interval_secs: 5,
+            last_tail_instant: None,
         }
     }
 }
@@ -179,6 +171,26 @@ impl eframe::App for App {
                     self.groups_rx = None;
                 }
             }
+        }
+
+        if self.logs_view.tail_mode && !self.is_fetching {
+            let now = Instant::now();
+            let should_trigger = match self.logs_view.last_tail_instant {
+                Some(last) => {
+                    now.duration_since(last).as_secs() >= self.logs_view.tail_interval_secs
+                }
+                None => true, // first time
+            };
+
+            if should_trigger {
+                // Use the same lookback as the manual "Fetch last 5m".
+                self.start_fetch_logs(Duration::from_secs(5 * 60));
+                self.logs_view.last_tail_instant = Some(now);
+            }
+        } else if !self.logs_view.tail_mode {
+            // If tail is off, clear the last_tail_instant so it restarts immediately
+            // next time it's turned on.
+            self.logs_view.last_tail_instant = None;
         }
 
         // Top navigation bar (view selection, basic actions).
@@ -391,6 +403,16 @@ impl App {
             ui.separator();
 
             ui.checkbox(&mut self.logs_view.show_local_time, "Local time");
+
+            ui.separator();
+            ui.label("Tail every (s):");
+            let mut interval = self.logs_view.tail_interval_secs as i32;
+            if ui
+                .add(egui::DragValue::new(&mut interval).clamp_range(1..=300))
+                .changed()
+            {
+                self.logs_view.tail_interval_secs = interval.max(1) as u64;
+            }
         });
 
         ui.separator();
