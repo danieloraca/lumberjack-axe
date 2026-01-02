@@ -1,5 +1,6 @@
 use crate::aws::{AwsLogError, FetchLogsParams, LogEntry, fetch_recent_logs};
 use crate::worker::{WorkerHandle, WorkerRequest};
+use chrono::{DateTime, Local, Utc};
 use eframe::egui;
 use std::time::Duration;
 
@@ -45,6 +46,7 @@ pub struct LogsViewState {
 
     /// Whether "tail mode" is enabled (implementation TBD).
     pub tail_mode: bool,
+    pub show_local_time: bool,
 
     /// In-memory buffer of log entries fetched from AWS.
     pub entries: Vec<LogEntry>,
@@ -65,6 +67,7 @@ impl LogsViewState {
             log_group: String::new(),
             filter_text: String::new(),
             tail_mode: false,
+            show_local_time: false,
             entries: Vec::new(),
             available_groups: Vec::new(),
             selected_group_index: None,
@@ -378,13 +381,16 @@ impl App {
             let filter_response = ui.text_edit_singleline(&mut self.logs_view.filter_text);
 
             if filter_response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                // Re-fetch with the new filter.
                 self.start_fetch_logs(Duration::from_secs(5 * 60));
             }
 
             ui.separator();
 
             ui.checkbox(&mut self.logs_view.tail_mode, "Tail");
+
+            ui.separator();
+
+            ui.checkbox(&mut self.logs_view.show_local_time, "Local time");
         });
 
         ui.separator();
@@ -393,10 +399,11 @@ impl App {
             .auto_shrink([false; 2])
             .show(ui, |ui| {
                 for entry in self.logs_view.entries.iter() {
-                    // Basic string for timestamp; more formatting can be added later.
-                    let ts = entry.timestamp_millis;
+                    let ts_formatted = format_timestamp_millis(
+                        entry.timestamp_millis,
+                        self.logs_view.show_local_time,
+                    );
 
-                    // Apply client-side filter in addition to server-side, if any.
                     if !self.logs_view.filter_text.is_empty()
                         && !entry
                             .message
@@ -429,8 +436,8 @@ impl App {
                     };
 
                     let header = match &entry.log_stream_name {
-                        Some(stream) => format!("[{ts}] ({stream})"),
-                        None => format!("[{ts}]"),
+                        Some(stream) => format!("[{}] ({})", ts_formatted, stream),
+                        None => format!("[{}]", ts_formatted),
                     };
 
                     ui.colored_label(egui::Color32::LIGHT_BLUE, header);
@@ -438,5 +445,26 @@ impl App {
                     ui.separator();
                 }
             });
+    }
+}
+
+fn format_timestamp_millis(ts_millis: i64, use_local: bool) -> String {
+    if ts_millis <= 0 {
+        return "-".to_string();
+    }
+
+    let secs = ts_millis / 1000;
+    let nanos = (ts_millis % 1000) * 1_000_000;
+    let naive = match chrono::NaiveDateTime::from_timestamp_opt(secs, nanos as u32) {
+        Some(n) => n,
+        None => return "-".to_string(),
+    };
+
+    if use_local {
+        let dt: DateTime<Local> = DateTime::from_utc(naive, *Local::now().offset());
+        dt.format("%Y-%m-%d %H:%M:%S%.3f").to_string()
+    } else {
+        let dt: DateTime<Utc> = DateTime::<Utc>::from_utc(naive, Utc);
+        dt.format("%Y-%m-%d %H:%M:%S%.3fZ").to_string()
     }
 }
