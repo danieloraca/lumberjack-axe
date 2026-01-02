@@ -64,9 +64,6 @@ async fn mk_client(profile: Option<&str>, region: Option<&str>) -> CloudWatchLog
         let region = aws_config::Region::new(r.to_string());
         loader = loader.region(region);
     } else {
-        // No explicit region: we *don't* special-case here; we just let
-        // the default env/config chain decide, like aws_test does.
-        // (We still keep BehaviorVersion for future-proof defaults.)
         return CloudWatchLogsClient::new(
             &aws_config::load_defaults(BehaviorVersion::latest()).await,
         );

@@ -1,13 +1,8 @@
+use aws_sdk_cloudwatchlogs::Client as CloudWatchLogsClient;
+use aws_sdk_cloudwatchlogs::types::FilteredLogEvent;
 use std::env;
 use std::time::{Duration, SystemTime};
 
-use aws_config::BehaviorVersion;
-use aws_sdk_cloudwatchlogs::Client as CloudWatchLogsClient;
-use aws_sdk_cloudwatchlogs::types::FilteredLogEvent;
-
-/// Simple standalone tester for AWS credentials / profile / region / log group.
-/// Run with:
-///   PROFILE=my-profile REGION=eu-west-1 LOG_GROUP=/aws/lambda/your-func cargo run --release --bin aws_test
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     println!("=== aws_test ===");
@@ -26,7 +21,6 @@ async fn main() {
     println!("Region:  {:?}", region.as_deref().unwrap_or("<auto>"));
     println!("LogGroup: {:?}", log_group);
 
-    // Build AWS config similarly to what we want in the app.
     let mut loader = aws_config::from_env();
 
     if let Some(ref p) = profile {

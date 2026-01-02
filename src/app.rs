@@ -1,4 +1,4 @@
-use crate::aws::{AwsLogError, FetchLogsParams, LogEntry, fetch_recent_logs};
+use crate::aws::{AwsLogError, LogEntry};
 use crate::worker::{WorkerHandle, WorkerRequest};
 use chrono::{DateTime, Local, Utc};
 use eframe::egui;
@@ -81,26 +81,10 @@ impl App {
             theme: Theme::Dark,
         }
     }
-
-    /// Notify the app that the tray requested the window to close/hide.
-    ///
-    /// The actual tray integration will live in another module, but it can call
-    /// this method (through a handle or message channel) to drive the UI.
-    pub fn request_close(&mut self) {
-        self.should_close = true;
-    }
-
-    /// Whether the app has requested the surrounding frame/window to close.
-    ///
-    /// The `eframe::App` implementation can use this to tell the frame to close.
-    pub fn should_close(&self) -> bool {
-        self.should_close
-    }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Honor external close requests, e.g. from tray/menu integration.
         if self.should_close {
             //
         }
@@ -110,7 +94,6 @@ impl eframe::App for App {
             Theme::Dark => ctx.set_visuals(egui::Visuals::dark()),
             Theme::RetroGreen => {
                 let mut visuals = egui::Visuals::dark();
-                // Retro CRT style
                 visuals.override_text_color = Some(egui::Color32::from_rgb(0x00, 0xff, 0x66));
                 visuals.panel_fill = egui::Color32::BLACK;
                 visuals.extreme_bg_color = egui::Color32::BLACK;

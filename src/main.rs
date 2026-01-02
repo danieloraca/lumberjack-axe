@@ -8,13 +8,9 @@ mod worker;
 use crate::app::App;
 use crate::tray::{TrayConfig, TrayEventReceiver, TrayHandle};
 use crate::worker::{WorkerHandle, spawn_worker};
-use tokio::runtime::Runtime;
 
 fn main() -> eframe::Result<()> {
-    // Spawn the background AWS worker.
     let worker_handle = spawn_worker();
-
-    // Tray setup as before.
     let tray_config = TrayConfig::default();
     let (tray_handle, tray_events) = TrayHandle::spawn(tray_config)
         .unwrap_or_else(|_err| (TrayHandle::dummy(), TrayEventReceiver::closed()));
