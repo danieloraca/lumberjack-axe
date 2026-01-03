@@ -105,6 +105,33 @@ impl eframe::App for App {
             }
         }
 
+        // Apply larger global fonts
+        let mut style: egui::Style = (*ctx.style()).clone();
+        style.text_styles = [
+            (
+                egui::TextStyle::Heading,
+                egui::FontId::new(26.0, egui::FontFamily::Proportional),
+            ),
+            (
+                egui::TextStyle::Body,
+                egui::FontId::new(18.0, egui::FontFamily::Proportional),
+            ),
+            (
+                egui::TextStyle::Monospace,
+                egui::FontId::new(17.0, egui::FontFamily::Monospace),
+            ),
+            (
+                egui::TextStyle::Button,
+                egui::FontId::new(18.0, egui::FontFamily::Proportional),
+            ),
+            (
+                egui::TextStyle::Small,
+                egui::FontId::new(14.0, egui::FontFamily::Proportional),
+            ),
+        ]
+        .into();
+        ctx.set_style(style);
+
         // Check for results from any in-flight background fetch.
         if let Some(rx) = self.fetch_rx.as_ref() {
             match rx.try_recv() {
