@@ -8,6 +8,7 @@ use crate::worker::{WorkerHandle, WorkerRequest};
 pub mod state;
 pub mod status_bar;
 pub mod ui_logs;
+pub mod ui_top;
 
 use state::{ActiveView, LogsViewState, Theme};
 
@@ -206,103 +207,7 @@ impl eframe::App for App {
         }
 
         // Top bar.
-        egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
-            // First row: title + view + theme + version/close
-            ui.horizontal(|ui| {
-                ui.heading("Lumberjack Axe");
-
-                ui.separator();
-
-                ui.selectable_value(&mut self.view, ActiveView::Logs, "Logs");
-
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("✕").clicked() {
-                        self.should_close = true;
-                    }
-                    ui.label("v0.1.0");
-
-                    ui.separator();
-
-                    let theme_label = match self.theme {
-                        Theme::Light => "Theme: Light",
-                        Theme::Dark => "Theme: Dark",
-                        Theme::RetroGreen => "Theme: Retro",
-                    };
-                    if ui.button(theme_label).clicked() {
-                        self.theme = match self.theme {
-                            Theme::Light => Theme::Dark,
-                            Theme::Dark => Theme::RetroGreen,
-                            Theme::RetroGreen => Theme::Light,
-                        };
-                    }
-                });
-            });
-
-            ui.separator();
-
-            // Second row: AWS settings.
-            ui.horizontal(|ui| {
-                ui.label("Profile:");
-                ui.add(egui::TextEdit::singleline(&mut self.logs_view.profile).desired_width(80.0));
-
-                ui.separator();
-
-                ui.label("Region:");
-                ui.add(egui::TextEdit::singleline(&mut self.logs_view.region).desired_width(100.0));
-
-                ui.separator();
-
-                let load_btn =
-                    ui.add_enabled(!self.is_loading_groups, egui::Button::new("Load groups"));
-                if load_btn.clicked() {
-                    self.start_load_log_groups();
-                }
-
-                if self.is_loading_groups {
-                    ui.spinner();
-                }
-            });
-
-            // Third row: group + fetch.
-            ui.horizontal(|ui| {
-                ui.label("Group:");
-
-                let current_group_name = self
-                    .logs_view
-                    .selected_group_index
-                    .and_then(|idx| self.logs_view.available_groups.get(idx))
-                    .cloned()
-                    .unwrap_or_else(|| self.logs_view.log_group.clone());
-
-                egui::ComboBox::from_id_salt("log_group_combo")
-                    .selected_text(if current_group_name.is_empty() {
-                        "<none>"
-                    } else {
-                        current_group_name.as_str()
-                    })
-                    .show_ui(ui, |ui| {
-                        for (idx, name) in self.logs_view.available_groups.iter().enumerate() {
-                            let selected = Some(idx) == self.logs_view.selected_group_index;
-                            if ui.selectable_label(selected, name).clicked() {
-                                self.logs_view.selected_group_index = Some(idx);
-                                self.logs_view.log_group = name.clone();
-                            }
-                        }
-                    });
-
-                ui.separator();
-
-                let fetch_btn =
-                    ui.add_enabled(!self.is_fetching, egui::Button::new("Fetch last 5m"));
-                if fetch_btn.clicked() {
-                    self.start_fetch_logs(Duration::from_secs(5 * 60));
-                }
-
-                if self.is_fetching {
-                    ui.spinner();
-                }
-            });
-        });
+        ui_top::draw_top_bar(self, ctx);
 
         // Main content.
         egui::CentralPanel::default().show(ctx, |ui| match self.view {
