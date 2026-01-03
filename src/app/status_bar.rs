@@ -9,21 +9,9 @@ pub fn draw_status_bar(app: &App, ctx: &egui::Context) {
             ui.horizontal(|ui| {
                 use egui::Align;
 
-                let status = if app.is_fetching {
-                    "Fetching logs…".to_string()
-                } else if app.is_loading_groups {
-                    "Loading log groups…".to_string()
-                } else if let Some(err) = &app.last_error {
-                    if err.len() > 120 {
-                        format!("Error: {}…", &err[..117])
-                    } else {
-                        format!("Error: {err}")
-                    }
-                } else {
-                    "Ready".to_string()
-                };
+                let (status, is_error) = compute_status(app);
 
-                if app.last_error.is_some() && !app.is_fetching && !app.is_loading_groups {
+                if is_error {
                     ui.colored_label(egui::Color32::RED, status);
                 } else {
                     ui.label(status);
@@ -37,4 +25,23 @@ pub fn draw_status_bar(app: &App, ctx: &egui::Context) {
                 });
             });
         });
+}
+
+fn compute_status(app: &App) -> (String, bool) {
+    if app.is_fetching {
+        ("Fetching logs…".to_string(), false)
+    } else if app.is_loading_groups {
+        ("Loading log groups…".to_string(), false)
+    } else if let Some(err) = &app.last_error {
+        let msg = if err.len() > 120 {
+            format!("Error: {}…", &err[..117])
+        } else {
+            format!("Error: {err}")
+        };
+        (msg, true)
+    } else if let Some(info) = &app.last_info {
+        (info.clone(), false) // <--- show info when present
+    } else {
+        ("Ready".to_string(), false)
+    }
 }

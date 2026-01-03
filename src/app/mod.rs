@@ -17,6 +17,7 @@ pub struct App {
     pub(crate) logs_view: LogsViewState,
     pub(crate) should_close: bool,
     pub(crate) last_error: Option<String>,
+    pub(crate) last_info: Option<String>,
     pub(crate) is_fetching: bool,
     pub(crate) fetch_rx: Option<std::sync::mpsc::Receiver<Result<Vec<LogEntry>, AwsLogError>>>,
     pub(crate) groups_rx: Option<std::sync::mpsc::Receiver<Result<Vec<String>, AwsLogError>>>,
@@ -32,6 +33,7 @@ impl App {
             logs_view: LogsViewState::new_default(),
             should_close: false,
             last_error: None,
+            last_info: None,
             is_fetching: false,
             fetch_rx: None,
             groups_rx: None,
@@ -145,12 +147,23 @@ impl eframe::App for App {
         if let Some(rx) = self.fetch_rx.as_ref() {
             match rx.try_recv() {
                 Ok(Ok(entries)) => {
+                    let count = entries.len();
                     self.logs_view.entries = entries;
                     self.is_fetching = false;
                     self.fetch_rx = None;
+
+                    if count == 0 {
+                        self.last_info = Some("No results (last 5m)".to_string());
+                    } else {
+                        self.last_info = Some(format!("Fetched {} events (last 5m)", count));
+                    }
+                    // Clear any stale error on success
+                    self.last_error = None;
                 }
+
                 Ok(Err(err)) => {
                     self.last_error = Some(format!("{err}"));
+                    self.last_info = None;
                     self.is_fetching = false;
                     self.fetch_rx = None;
                 }
@@ -158,6 +171,7 @@ impl eframe::App for App {
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                     self.is_fetching = false;
                     self.fetch_rx = None;
+                    self.last_info = Some("Fetch aborted".to_string());
                 }
             }
         }
