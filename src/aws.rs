@@ -155,3 +155,59 @@ pub async fn list_log_groups(
 
     Ok(groups)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aws_sdk_cloudwatchlogs::types::FilteredLogEvent;
+
+    #[test]
+    fn to_millis_handles_epoch_and_positive() {
+        use std::time::{Duration, SystemTime};
+
+        assert_eq!(to_millis(SystemTime::UNIX_EPOCH), 0);
+
+        let one_sec = SystemTime::UNIX_EPOCH + Duration::from_secs(1);
+        assert_eq!(to_millis(one_sec), 1_000);
+
+        let one_and_half = SystemTime::UNIX_EPOCH + Duration::from_millis(1500);
+        assert_eq!(to_millis(one_and_half), 1_500);
+    }
+
+    #[test]
+    fn filtered_to_entry_maps_fields_correctly() {
+        let event = FilteredLogEvent::builder()
+            .timestamp(1_700_000_000_123_i64)
+            .message("hello world".to_string())
+            .log_stream_name("my-stream".to_string())
+            .build();
+
+        let entry = filtered_to_entry(event);
+
+        assert_eq!(entry.timestamp_millis, 1_700_000_000_123_i64);
+        assert_eq!(entry.message, "hello world");
+        assert_eq!(entry.log_stream_name.as_deref(), Some("my-stream"));
+    }
+
+    #[test]
+    fn filtered_to_entry_handles_missing_fields() {
+        let event = FilteredLogEvent::builder().build();
+
+        let entry = filtered_to_entry(event);
+
+        // Defaults when fields are missing
+        assert_eq!(entry.timestamp_millis, 0);
+        assert_eq!(entry.message, "");
+        assert_eq!(entry.log_stream_name, None);
+    }
+
+    #[test]
+    fn fetch_logs_params_default_values() {
+        let params = FetchLogsParams::default();
+        assert_eq!(params.region, None);
+        assert_eq!(params.log_group, "");
+        assert_eq!(params.filter_pattern, None);
+        assert_eq!(params.lookback, Duration::from_secs(5 * 60));
+        assert_eq!(params.limit, 1_000);
+    }
+}

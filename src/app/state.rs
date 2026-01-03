@@ -88,3 +88,50 @@ pub fn try_pretty_json(message: &str) -> Option<String> {
         Err(_) => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn logs_view_state_defaults_are_sensible() {
+        let s = LogsViewState::new_default();
+
+        assert_eq!(s.profile, "form");
+        assert_eq!(s.region, "eu-west-1");
+        assert_eq!(s.log_group, "");
+        assert_eq!(s.filter_text, "");
+        assert!(!s.tail_mode);
+        assert!(!s.show_local_time);
+        assert!(s.entries.is_empty());
+        assert!(s.available_groups.is_empty());
+        assert_eq!(s.selected_group_index, None);
+        assert_eq!(s.tail_interval_secs, 5);
+        assert!(s.last_tail_instant.is_none());
+    }
+
+    #[test]
+    fn format_timestamp_millis_handles_zero_and_positive() {
+        let utc = format_timestamp_millis(0, false);
+        assert_eq!(utc, "-");
+
+        let ts = 1_700_000_000_123_i64; // just some millis
+        let utc = format_timestamp_millis(ts, false);
+        assert!(utc.ends_with('Z')); // UTC has Z suffix
+
+        let local = format_timestamp_millis(ts, true);
+        assert!(!local.ends_with('Z')); // local doesn't
+    }
+
+    #[test]
+    fn try_pretty_json_prettifies_valid_json_and_rejects_non_json() {
+        let raw = r#"{"a":1,"b":{"c":2}}"#;
+        let pretty = try_pretty_json(raw).expect("should parse");
+        assert!(pretty.contains("\n")); // multi-line
+        assert!(pretty.contains("\"a\""));
+        assert!(pretty.contains("\"b\""));
+
+        assert_eq!(try_pretty_json("not json"), None);
+        assert_eq!(try_pretty_json("{not json}"), None);
+    }
+}

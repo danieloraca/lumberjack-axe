@@ -100,3 +100,63 @@ async fn worker_loop(rx: Receiver<WorkerRequest>) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::aws::{AwsLogError, LogEntry};
+
+    #[test]
+    fn worker_request_fetch_recent_logs_can_be_constructed() {
+        let (tx, _rx) = std::sync::mpsc::channel::<Result<Vec<LogEntry>, AwsLogError>>();
+
+        let req = WorkerRequest::FetchRecentLogs {
+            profile: Some("form".to_string()),
+            region: Some("eu-west-1".to_string()),
+            log_group: "/aws/ecs/containerinsights/Form-production/performance".to_string(),
+            filter_pattern: Some("ERROR".to_string()),
+            lookback: Duration::from_secs(300),
+            limit: 1000,
+            respond_to: tx,
+        };
+
+        match req {
+            WorkerRequest::FetchRecentLogs { .. } => {
+                // OK
+            }
+            _ => panic!("Expected FetchRecentLogs variant"),
+        }
+    }
+
+    #[test]
+    fn worker_request_list_log_groups_can_be_constructed() {
+        let (tx, _rx) = std::sync::mpsc::channel::<Result<Vec<String>, AwsLogError>>();
+
+        let req = WorkerRequest::ListLogGroups {
+            profile: Some("form".to_string()),
+            region: Some("eu-west-1".to_string()),
+            limit: 50,
+            respond_to: tx,
+        };
+
+        match req {
+            WorkerRequest::ListLogGroups { .. } => {
+                // OK
+            }
+            _ => panic!("Expected ListLogGroups variant"),
+        }
+    }
+
+    #[test]
+    fn spawn_worker_returns_handle_and_send_does_not_panic() {
+        let worker = spawn_worker();
+        let (tx, _rx) = std::sync::mpsc::channel::<Result<Vec<String>, AwsLogError>>();
+
+        worker.send(WorkerRequest::ListLogGroups {
+            profile: None,
+            region: None,
+            limit: 10,
+            respond_to: tx,
+        });
+    }
+}

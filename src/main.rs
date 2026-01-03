@@ -9,6 +9,15 @@ use crate::app::App;
 use crate::tray::{TrayConfig, TrayEventReceiver, TrayHandle};
 use crate::worker::{WorkerHandle, spawn_worker};
 
+struct AppShared {
+    #[allow(dead_code)]
+    tray_handle: TrayHandle,
+    #[allow(dead_code)]
+    tray_events: TrayEventReceiver,
+    #[allow(dead_code)]
+    worker_handle: WorkerHandle,
+}
+
 fn main() -> eframe::Result<()> {
     let worker_handle = spawn_worker();
     let tray_config = TrayConfig::default();
@@ -35,13 +44,4 @@ fn main() -> eframe::Result<()> {
             Ok(Box::new(App::new(cc, shared.worker_handle.clone())) as Box<dyn eframe::App>)
         }),
     )
-}
-
-struct AppShared {
-    #[allow(dead_code)]
-    tray_handle: TrayHandle,
-    #[allow(dead_code)]
-    tray_events: TrayEventReceiver,
-    #[allow(dead_code)]
-    worker_handle: WorkerHandle,
 }

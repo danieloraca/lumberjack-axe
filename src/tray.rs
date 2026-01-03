@@ -145,3 +145,46 @@ fn load_axe_icon() -> Option<Icon> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tray_event_display_matches_variant_names() {
+        assert_eq!(TrayEvent::ToggleWindow.to_string(), "ToggleWindow");
+        assert_eq!(TrayEvent::ShowWindow.to_string(), "ShowWindow");
+        assert_eq!(TrayEvent::HideWindow.to_string(), "HideWindow");
+        assert_eq!(TrayEvent::QuitRequested.to_string(), "QuitRequested");
+    }
+
+    #[test]
+    fn default_tray_config_has_expected_tooltip() {
+        let cfg = TrayConfig::default();
+        assert_eq!(cfg.tooltip, "Lumberjack Axe");
+    }
+
+    #[test]
+    fn tray_error_display_is_human_readable() {
+        let e1 = TrayError::Unsupported;
+        assert!(e1.to_string().contains("tray not supported"));
+
+        let e2 = TrayError::InitFailed("boom".into());
+        assert!(e2.to_string().contains("failed to initialize tray"));
+        assert!(e2.to_string().contains("boom"));
+    }
+
+    #[test]
+    fn closed_tray_event_receiver_has_no_inner_receiver() {
+        let rx = TrayEventReceiver::closed();
+        let _ = rx;
+    }
+
+    #[test]
+    fn tray_event_receiver_new_constructs() {
+        let (tx, inner_rx) = crossbeam_channel::unbounded::<TrayEvent>();
+        drop(tx); // close the sender
+        let rx = TrayEventReceiver::new(inner_rx);
+        let _ = rx;
+    }
+}
