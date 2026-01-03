@@ -19,6 +19,7 @@ pub struct App {
     /// Handle to the background AWS worker.
     worker: WorkerHandle,
     theme: Theme,
+    is_loading_groups: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,6 +81,7 @@ impl App {
             groups_rx: None,
             worker,
             theme: Theme::Dark,
+            is_loading_groups: false,
         }
     }
 }
@@ -168,11 +170,13 @@ impl eframe::App for App {
                         }
                     }
                     self.groups_rx = None;
+                    self.is_loading_groups = false;
                 }
                 Ok(Err(err)) => {
                     eprintln!("[axe] groups_rx received ERROR: {err}");
                     self.last_error = Some(format!("{err}"));
                     self.groups_rx = None;
+                    self.is_loading_groups = false;
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {
                     // Still loading; nothing to do this frame.
@@ -180,6 +184,7 @@ impl eframe::App for App {
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                     eprintln!("[axe] groups_rx disconnected");
                     self.groups_rx = None;
+                    self.is_loading_groups = false;
                 }
             }
         }
@@ -248,12 +253,21 @@ impl eframe::App for App {
                 ui.separator();
 
                 ui.label("Region:");
-                ui.add(egui::TextEdit::singleline(&mut self.logs_view.region).desired_width(80.0));
+                ui.add(egui::TextEdit::singleline(&mut self.logs_view.region).desired_width(100.0));
 
                 ui.separator();
 
-                if ui.button("Load groups").clicked() {
+                // Disable the button while a load is in progress
+                let load_btn =
+                    ui.add_enabled(!self.is_loading_groups, egui::Button::new("Load groups"));
+                if load_btn.clicked() {
                     self.start_load_log_groups();
+                }
+
+                // Visual indicator
+                if self.is_loading_groups {
+                    ui.spinner(); // built-in egui spinner
+                    ui.label("Loading...");
                 }
             });
 
@@ -361,6 +375,7 @@ impl App {
         self.logs_view.available_groups.clear();
         self.logs_view.selected_group_index = None;
         self.last_error = None;
+        self.is_loading_groups = true;
 
         let (tx, rx) = std::sync::mpsc::channel::<Result<Vec<String>, AwsLogError>>();
 
