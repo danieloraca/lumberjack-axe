@@ -163,17 +163,12 @@ pub async fn list_log_groups(
 }
 
 fn extract_nice_aws_message_from_debug(debug_str: &str) -> Option<String> {
-    // Look for the JSON error payload inside the debug string.
-    // The pattern looks like: b"{\"__type\":\"...\",\"message\":\"...\"}"
     if let Some(start_idx) = debug_str.find("b\"{") {
-        // Find the closing quote after the JSON.
         if let Some(rest) = debug_str.get(start_idx + 2..) {
             if let Some(end_rel) = rest.find("\"}") {
                 let json_slice = &rest[..end_rel + 2]; // include the closing "}
-                // Unescape the Rust string-literal style quotes/backslashes.
                 let unescaped = json_slice.replace("\\\"", "\"");
 
-                // Try to parse as JSON: {"__type":"...", "message":"..."}
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(&unescaped) {
                     let code = v
                         .get("__type")
@@ -219,6 +214,28 @@ mod tests {
 
         let one_and_half = SystemTime::UNIX_EPOCH + Duration::from_millis(1500);
         assert_eq!(to_millis(one_and_half), 1_500);
+    }
+
+    #[test]
+    fn extract_nice_aws_message_parses_expired_token_json() {
+        // Simulate the relevant part of the debug string we see in practice.
+        let debug = r#"ServiceError(ServiceError { source: Unhandled(Unhandled { source: ErrorMetadata { code: Some("ExpiredTokenException"), message: Some("The security token included in the request is expired"), extras: Some({"aws_request_id": "abc"}) }, meta: ErrorMetadata { code: Some("ExpiredTokenException"), message: Some("The security token included in the request is expired"), extras: Some({"aws_request_id": "abc"}) } }), raw: Response { status: StatusCode(400), headers: Headers { headers: {} }, body: SdkBody { inner: Once(Some(b"{\"__type\":\"ExpiredTokenException\",\"message\":\"The security token included in the request is expired\"}")), retryable: true }, extensions: Extensions { extensions_02x: Extensions, extensions_1x: {} } } })"#;
+
+        let msg = extract_nice_aws_message_from_debug(debug).expect("should parse JSON payload");
+        assert!(
+            msg.contains("ExpiredTokenException"),
+            "expected code in message, got: {msg}"
+        );
+        assert!(
+            msg.contains("The security token included in the request is expired"),
+            "expected human message in result, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn extract_nice_aws_message_returns_none_when_no_json() {
+        let debug = "Some other unrelated error without JSON body";
+        assert_eq!(extract_nice_aws_message_from_debug(debug), None);
     }
 
     #[test]
