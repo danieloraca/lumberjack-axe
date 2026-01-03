@@ -23,11 +23,8 @@ pub enum AwsLogError {
         source: CloudWatchLogsError,
     },
 
-    #[error("failed to list CloudWatch log groups in region {region:?}: {message}")]
-    ListLogGroups {
-        region: Option<String>,
-        message: String,
-    },
+    #[error("failed to list CloudWatch log groups in region {region}: {message}")]
+    ListLogGroups { region: String, message: String },
 }
 
 /// High-level parameters for fetching recent logs.
@@ -139,10 +136,19 @@ pub async fn list_log_groups(
     }
 
     let resp = req.send().await.map_err(|e| {
-        eprintln!("DescribeLogGroups raw error: {e:?}");
+        let debug_str = format!("{e:?}");
+        eprintln!("DescribeLogGroups raw error: {debug_str}");
+
+        let msg = extract_nice_aws_message_from_debug(&debug_str).unwrap_or_else(|| e.to_string());
+
+        // Format the region nicely instead of carrying Option<String>.
+        let region_display = region
+            .map(|r| r.to_string())
+            .unwrap_or_else(|| "<default>".to_string());
+
         AwsLogError::ListLogGroups {
-            region: region.map(str::to_string),
-            message: e.to_string(),
+            region: region_display,
+            message: msg,
         }
     })?;
 
@@ -154,6 +160,47 @@ pub async fn list_log_groups(
         .collect();
 
     Ok(groups)
+}
+
+fn extract_nice_aws_message_from_debug(debug_str: &str) -> Option<String> {
+    // Look for the JSON error payload inside the debug string.
+    // The pattern looks like: b"{\"__type\":\"...\",\"message\":\"...\"}"
+    if let Some(start_idx) = debug_str.find("b\"{") {
+        // Find the closing quote after the JSON.
+        if let Some(rest) = debug_str.get(start_idx + 2..) {
+            if let Some(end_rel) = rest.find("\"}") {
+                let json_slice = &rest[..end_rel + 2]; // include the closing "}
+                // Unescape the Rust string-literal style quotes/backslashes.
+                let unescaped = json_slice.replace("\\\"", "\"");
+
+                // Try to parse as JSON: {"__type":"...", "message":"..."}
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&unescaped) {
+                    let code = v
+                        .get("__type")
+                        .and_then(|c| c.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let msg = v
+                        .get("message")
+                        .and_then(|m| m.as_str())
+                        .unwrap_or("")
+                        .to_string();
+
+                    if !code.is_empty() || !msg.is_empty() {
+                        return Some(if !code.is_empty() && !msg.is_empty() {
+                            format!("{code}: {msg}")
+                        } else if !code.is_empty() {
+                            code
+                        } else {
+                            msg
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 #[cfg(test)]
