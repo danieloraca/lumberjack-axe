@@ -159,6 +159,7 @@ impl eframe::App for App {
         }
 
         // Check for results from any in-flight log group list load.
+        // Check for results from any in-flight log group list load.
         if let Some(rx) = self.groups_rx.as_ref() {
             match rx.try_recv() {
                 Ok(Ok(groups)) => {
@@ -274,8 +275,6 @@ impl eframe::App for App {
             // Third row: log group selection + manual override + fetch
             ui.horizontal(|ui| {
                 ui.label("Group:");
-                // Log group selection dropdown.
-                // Then the dropdown
                 let current_group_name = self
                     .logs_view
                     .selected_group_index
@@ -301,11 +300,14 @@ impl eframe::App for App {
 
                 ui.separator();
 
-                if ui
-                    .add_enabled(!self.is_fetching, egui::Button::new("Fetch last 5m"))
-                    .clicked()
-                {
+                let fetch_btn =
+                    ui.add_enabled(!self.is_fetching, egui::Button::new("Fetch last 5m"));
+                if fetch_btn.clicked() {
                     self.start_fetch_logs(Duration::from_secs(5 * 60));
+                }
+
+                if self.is_fetching {
+                    ui.spinner();
                 }
             });
         });
@@ -314,6 +316,48 @@ impl eframe::App for App {
         egui::CentralPanel::default().show(ctx, |ui| match self.view {
             ActiveView::Logs => self.render_logs_view(ui),
         });
+
+        // Status bar at the bottom
+        egui::TopBottomPanel::bottom("status_bar")
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    use egui::Align;
+
+                    // Left: status text
+                    let status = if self.is_fetching {
+                        "Fetching logs…".to_string()
+                    } else if self.is_loading_groups {
+                        "Loading log groups…".to_string()
+                    } else if let Some(err) = &self.last_error {
+                        if err.len() > 120 {
+                            format!("Error: {}…", &err[..117])
+                        } else {
+                            format!("Error: {err}")
+                        }
+                    } else {
+                        "Ready".to_string()
+                    };
+
+                    if self.last_error.is_some() && !self.is_fetching && !self.is_loading_groups {
+                        ui.colored_label(egui::Color32::RED, status);
+                    } else {
+                        ui.label(status);
+                    }
+
+                    // Right: tail status or other small info
+                    ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                        ui.label(format!(
+                            "Tail: {}",
+                            if self.logs_view.tail_mode {
+                                "ON"
+                            } else {
+                                "OFF"
+                            }
+                        ));
+                    });
+                });
+            });
     }
 }
 
@@ -375,6 +419,7 @@ impl App {
         self.logs_view.available_groups.clear();
         self.logs_view.selected_group_index = None;
         self.last_error = None;
+
         self.is_loading_groups = true;
 
         let (tx, rx) = std::sync::mpsc::channel::<Result<Vec<String>, AwsLogError>>();
@@ -399,18 +444,12 @@ impl App {
 
     /// Render the logs view (now backed by AWS).
     fn render_logs_view(&mut self, ui: &mut egui::Ui) {
-        ui.label("Logs (CloudWatch via AWS SDK):");
-        ui.separator();
-
-        if let Some(err) = &self.last_error {
-            ui.colored_label(egui::Color32::RED, err);
-            ui.separator();
-        }
-
         // Controls row: filter and tail toggle.
         ui.horizontal(|ui| {
             ui.label("Filter (CloudWatch pattern):");
-            let filter_response = ui.text_edit_singleline(&mut self.logs_view.filter_text);
+            let filter_response = ui.add(
+                egui::TextEdit::singleline(&mut self.logs_view.filter_text).desired_width(150.0), // pick whatever feels right
+            );
 
             if filter_response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 self.start_fetch_logs(Duration::from_secs(5 * 60));
