@@ -216,12 +216,12 @@ impl eframe::App for App {
             // Second row: AWS connection settings (Profile, Region, Load groups)
             ui.horizontal(|ui| {
                 ui.label("Profile:");
-                ui.text_edit_singleline(&mut self.logs_view.profile);
+                ui.add(egui::TextEdit::singleline(&mut self.logs_view.profile).desired_width(80.0));
 
                 ui.separator();
 
                 ui.label("Region:");
-                ui.text_edit_singleline(&mut self.logs_view.region);
+                ui.add(egui::TextEdit::singleline(&mut self.logs_view.region).desired_width(80.0));
 
                 ui.separator();
 
@@ -232,37 +232,31 @@ impl eframe::App for App {
 
             // Third row: log group selection + manual override + fetch
             ui.horizontal(|ui| {
-                // Optional dropdown if we have groups.
-                if !self.logs_view.available_groups.is_empty() {
-                    let current_group_name = self
-                        .logs_view
-                        .selected_group_index
-                        .and_then(|idx| self.logs_view.available_groups.get(idx))
-                        .cloned()
-                        .unwrap_or_else(|| self.logs_view.log_group.clone());
+                ui.label("Group:");
+                // Log group selection dropdown.
+                // Then the dropdown
+                let current_group_name = self
+                    .logs_view
+                    .selected_group_index
+                    .and_then(|idx| self.logs_view.available_groups.get(idx))
+                    .cloned()
+                    .unwrap_or_else(|| self.logs_view.log_group.clone());
 
-                    egui::ComboBox::from_label("Log group:")
-                        .selected_text(if current_group_name.is_empty() {
-                            "<none>"
-                        } else {
-                            current_group_name.as_str()
-                        })
-                        .show_ui(ui, |ui| {
-                            for (idx, name) in self.logs_view.available_groups.iter().enumerate() {
-                                let selected = Some(idx) == self.logs_view.selected_group_index;
-                                if ui.selectable_label(selected, name).clicked() {
-                                    self.logs_view.selected_group_index = Some(idx);
-                                    self.logs_view.log_group = name.clone();
-                                }
+                egui::ComboBox::from_id_salt("log_group_combo")
+                    .selected_text(if current_group_name.is_empty() {
+                        "<none>"
+                    } else {
+                        current_group_name.as_str()
+                    })
+                    .show_ui(ui, |ui| {
+                        for (idx, name) in self.logs_view.available_groups.iter().enumerate() {
+                            let selected = Some(idx) == self.logs_view.selected_group_index;
+                            if ui.selectable_label(selected, name).clicked() {
+                                self.logs_view.selected_group_index = Some(idx);
+                                self.logs_view.log_group = name.clone();
                             }
-                        });
-                }
-
-                ui.separator();
-
-                // Always-available manual log group input.
-                ui.label("Log group (manual):");
-                ui.text_edit_singleline(&mut self.logs_view.log_group);
+                        }
+                    });
 
                 ui.separator();
 
